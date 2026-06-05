@@ -272,6 +272,9 @@ Rules for tools:
 * I will run them and paste the results back, then you continue.
 * NEVER invent file contents — request the file instead.
 
+* The bash tool runs commands in the repo root. The user must confirm before
+  execution, so prefer read-only commands (ls, cat, git log) when possible.
+
 To WRITE a file mid-task, put write_file <path> in the tool block and provide
 its content in a fenced block AFTER the tool block (one block per write_file, in
 order). The change is shown to me as a diff to accept or reject. Example:
@@ -484,8 +487,7 @@ function M.write_doc()
   vim.bo.filetype = "markdown"
 
   notify(
-    existed and "CLAUDE.md exists -- buffer overwritten, review then :w"
-      or "CLAUDE.md ready in buffer -- :w to save"
+    existed and "CLAUDE.md exists -- buffer overwritten, review then :w" or "CLAUDE.md ready in buffer -- :w to save"
   )
 end
 
@@ -502,6 +504,8 @@ local TOOL_MAX_GREP = 100
 -- Cap file reads per turn so a single tool block can't dump the whole repo into
 -- one paste. The model is told to ask for the rest on the next turn.
 local TOOL_MAX_FILES_PER_TURN = 3
+-- bash output can be voluminous (build logs); give it more headroom than grep.
+local TOOL_MAX_BASH_LINES = 300
 
 -- Cap a list in place to n entries, returning a "truncated" note (or "").
 local function cap(list, n, label)
@@ -643,13 +647,103 @@ local function tool_git_diff(root)
   return "```diff\n" .. out .. "\n```"
 end
 
+local function tool_bash(root, args)
+  local cmd = vim.trim(args or "")
+  if cmd == "" then
+    return "ERROR: empty command"
+  end
+
+  local confirm = vim.fn.confirm("Run command?: " .. cmd, "&Yes\n&No", 2)
+  if confirm ~= 1 then
+    return "Command cancelled by user"
+  end
+
+  local full_cmd = ("cd %s && %s 2>&1"):format(vim.fn.shellescape(root), cmd)
+  local out = vim.fn.system(full_cmd)
+  local lines = vim.split(out, "\n")
+  if #lines > 0 and lines[#lines] == "" then
+    lines[#lines] = nil
+  end
+
+  local prefix = ""
+  if vim.v.shell_error ~= 0 then
+    prefix = ("Exit code: %d\n"):format(vim.v.shell_error)
+  end
+
+  local note = cap(lines, TOOL_MAX_BASH_LINES, "lines")
+  return prefix .. table.concat(lines, "\n") .. note
+end
+
+local function tool_diagnostics(root, args)
+  local path = vim.trim(args or "")
+  local diagnostics
+  local header
+
+  if path ~= "" then
+    local abs, err = safe_path(root, path)
+    if not abs then
+      return "ERROR: " .. err
+    end
+    local bufnr = vim.fn.bufnr(abs)
+    if bufnr == -1 then
+      return "(no diagnostics — file not open in a buffer)"
+    end
+    diagnostics = vim.diagnostic.get(bufnr)
+    header = ("Diagnostics for %s:"):format(path)
+  else
+    diagnostics = vim.diagnostic.get()
+    header = "Workspace diagnostics:"
+  end
+
+  if #diagnostics == 0 then
+    return "(no diagnostics)"
+  end
+
+  table.sort(diagnostics, function(a, b)
+    if a.severity ~= b.severity then
+      return a.severity < b.severity
+    end
+    if a.bufnr ~= b.bufnr then
+      return a.bufnr < b.bufnr
+    end
+    return a.lnum < b.lnum
+  end)
+
+  local sev_names = { [1] = "ERROR", [2] = "WARN", [3] = "INFO", [4] = "HINT" }
+  local lines = {}
+  for _, d in ipairs(diagnostics) do
+    local buf_name = vim.api.nvim_buf_get_name(d.bufnr)
+    if buf_name:sub(1, #root + 1) == root .. "/" then
+      buf_name = buf_name:sub(#root + 2)
+    end
+    local sev = sev_names[d.severity] or "OTHER"
+    table.insert(lines, ("%s:%d:%d %s: %s"):format(buf_name, d.lnum + 1, d.col + 1, sev, d.message))
+  end
+
+  local note = cap(lines, 100, "diagnostics")
+  return header .. "\n" .. table.concat(lines, "\n") .. note
+end
+
 -- SINGLE SOURCE OF TRUTH for the tool set. The dispatcher, the system-prompt
 -- signatures (tool_signatures) and the TOOL RESULTS reminder (tools_reminder)
 -- are all derived from this -- add a tool here and every surface updates.
 -- "heavy" tools count against the per-turn file-read limit.
 local TOOLS = {
   { name = "find_file", arg = "<name>", help = "locate a tracked file by name", run = tool_find_file },
-  { name = "read_file", arg = "<path>[:a-b]", help = "read a file (optional line range)", run = tool_read_file, heavy = true },
+  {
+    name = "read_file",
+    arg = "<path>[:a-b]",
+    help = "read a file (optional line range)",
+    run = tool_read_file,
+    heavy = true,
+  },
+  {
+    name = "diagnostics",
+    arg = "[<path>]",
+    help = "get LSP diagnostics (workspace or single file)",
+    run = tool_diagnostics,
+  },
+  { name = "bash", arg = "<command>", help = "run a bash command in the repo root", run = tool_bash },
   { name = "list_dir", arg = "[<path>]", help = "list tracked files", run = tool_list_dir, aliases = { "tree" } },
   { name = "grep", arg = "<pattern>", help = "search the repo", run = tool_grep },
   { name = "git_diff", arg = "", help = "current unstaged changes", run = tool_git_diff },
@@ -724,7 +818,9 @@ function M.tool()
         if not content then
           table.insert(
             results,
-            ("TOOL RESULT — %s\nERROR: provide the file content in a fenced block after the ```tool block"):format(line)
+            ("TOOL RESULT — %s\nERROR: provide the file content in a fenced block after the ```tool block"):format(
+              line
+            )
           )
         else
           table.insert(writes, { path = vim.trim(args), content = content, line = line })
@@ -754,12 +850,7 @@ function M.tool()
   end
 
   local function finalize()
-    copy(
-      "TOOL RESULTS (paste back to continue):\n\n"
-        .. table.concat(results, "\n\n")
-        .. "\n\n"
-        .. tools_reminder
-    )
+    copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder)
   end
 
   -- Reads are done; now preview each write_file in turn, then copy everything.
@@ -837,12 +928,7 @@ function M.code()
     return
   end
   copy(
-    ("File: %s\n\nModify this code only:\n```%s\n%s\n```\n\n%s"):format(
-      rel_path(),
-      vim.bo.filetype,
-      sel,
-      CODE_RULES
-    )
+    ("File: %s\n\nModify this code only:\n```%s\n%s\n```\n\n%s"):format(rel_path(), vim.bo.filetype, sel, CODE_RULES)
   )
 end
 
