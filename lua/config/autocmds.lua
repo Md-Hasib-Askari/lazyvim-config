@@ -15,3 +15,20 @@ vim.api.nvim_create_autocmd("CursorHold", {
     vim.diagnostic.open_float(nil, { focusable = false })
   end,
 })
+
+-- Create missing parent directories when saving a file, so writing a brand-new
+-- path (e.g. an agent.lua multi-file apply that scaffolds src/Foo/Bar/Baz.cs)
+-- just works instead of failing with "no such file or directory".
+vim.api.nvim_create_autocmd("BufWritePre", {
+  group = vim.api.nvim_create_augroup("user_mkdir_on_save", { clear = true }),
+  callback = function(args)
+    -- Skip protocol buffers (oil://, fugitive://, ...) and non-file buffers.
+    if args.match:match("^%w%w+://") or vim.bo[args.buf].buftype ~= "" then
+      return
+    end
+    local dir = vim.fn.fnamemodify(args.match, ":p:h")
+    if vim.fn.isdirectory(dir) == 0 then
+      vim.fn.mkdir(dir, "p")
+    end
+  end,
+})
