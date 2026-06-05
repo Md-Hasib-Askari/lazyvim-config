@@ -1289,6 +1289,12 @@ function M.apply()
     return
   end
 
+  -- A ```tool block means the model is requesting context or writing files via
+  -- the tool loop -- delegate. Otherwise this is a final answer to apply.
+  if resp:match("```tool%s*\n.-\n```") then
+    return M.tool()
+  end
+
   -- 0. File:-tagged response (one or many files): apply each, honoring File:.
   local entries = parse_entries(resp)
   if #entries > 0 then

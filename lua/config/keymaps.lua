@@ -33,11 +33,10 @@ end, { desc = "Open Claude with current file" })
 -- ------------------------------------------------------
 -- Typical loop:
 --   <leader>ai  set up the chat (copies the system prompt) -> paste into LLM
---   ask your question; if it needs files it replies with a ```tool block
---   <leader>at  run that block -> copies TOOL RESULTS -> paste back to LLM
---   LLM replies with a diff or full file
---   <leader>aa  preview the change (colored diff) -> ga/<CR> apply, q/<Esc> cancel
---   :w          save when happy (apply only touches the buffer, never disk)
+--   ask your question; the LLM replies with a ```tool block OR a final answer
+--   <leader>aa  ONE key: runs a ```tool block (copies results to paste back),
+--               or previews+applies a diff/Type:full reply (ga apply, q cancel)
+--   repeat until done; :w to save (apply only touches buffers, never disk)
 -- ------------------------------------------------------
 -- Prompt builders (copy a prompt to the clipboard):
 --   <leader>ai  init        system prompt: tool protocol + output format
@@ -50,11 +49,11 @@ end, { desc = "Open Claude with current file" })
 --   <leader>ad  code_diff   selection -> "return ONLY a diff"
 --   (each prepends "File: <repo-relative path>" so replies target the right file)
 -- Runtime (act on the clipboard / buffer):
---   <leader>at  tool        run a ```tool block (find_file/read_file/list_dir/
---                           grep/git_diff), copy results back
---   <leader>aa  apply       apply a diff or Type:full reply, with diff preview
+--   <leader>aa  apply       auto-detects: run tools (find_file/read_file/grep/
+--                           list_dir/git_diff/write_file) OR apply a diff/full
+--                           reply (single or multi-file) with a colored preview
 --   <leader>aW  write_doc   drop an LLM markdown reply into a CLAUDE.md buffer
--- Ex commands mirror these (:AgentInit, :AgentTool, :AgentApply, ...) and
+-- Ex commands mirror these; :AgentTool forces tool-only handling, and
 -- :AgentAddFile / :AgentCode / :AgentDiff / :AgentRefactor have no keymap.
 -- ======================================================
 
@@ -89,7 +88,6 @@ end
 vim.keymap.set({ "n", "x" }, "<leader>ai", agent.init, opts("Initialize prompt"))
 vim.keymap.set("n", "<leader>aI", agent.init_project, opts("Document repo (CLAUDE.md)"))
 vim.keymap.set("n", "<leader>aW", agent.write_doc, opts("Write reply to CLAUDE.md buffer"))
-vim.keymap.set("n", "<leader>at", agent.tool, opts("Run tool call from clipboard"))
 vim.keymap.set({ "n", "x" }, "<leader>ap", sel(agent.plan), opts("Plan task"))
 vim.keymap.set({ "n", "x" }, "<leader>ax", agent.context, opts("Surrounding context"))
 vim.keymap.set({ "n", "x" }, "<leader>af", sel(agent.fix), opts("Fix error"))
@@ -98,7 +96,7 @@ vim.keymap.set({ "n", "x" }, "<leader>af", sel(agent.fix), opts("Fix error"))
 vim.keymap.set({ "n", "x" }, "<leader>ar", sel(agent.refactor), opts("Refactor selection"))
 vim.keymap.set({ "n", "x" }, "<leader>ao", sel(agent.code), opts("Modify selection"))
 vim.keymap.set({ "n", "x" }, "<leader>ad", sel(agent.code_diff), opts("Diff selection"))
-vim.keymap.set({ "n", "x" }, "<leader>aa", sel(agent.apply), opts("Apply from clipboard"))
+vim.keymap.set({ "n", "x" }, "<leader>aa", sel(agent.apply), opts("Apply / run tools from clipboard"))
 
 -- ======================================================
 -- EX COMMANDS
