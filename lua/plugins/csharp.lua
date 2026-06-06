@@ -4,19 +4,45 @@ return {
     opts = {
       servers = {
         omnisharp = false,
-        csharp_ls = {
-          cmd = {
-            "csharp-ls",
-            "--solution",
-            "MultiTenantSaasPlatform.sln",
-          },
-          setup = {
-            csharp_ls = function(server, opts)
-              require("lspconfig")[server].setup(opts)
-            end,
-          },
-        },
+        csharp_ls = false,
       },
     },
+  },
+  {
+    "neovim/nvim-lspconfig",
+    config = function()
+      local lspconfig = require("lspconfig")
+
+      lspconfig.util.on_setup = nil
+
+      vim.lsp.config("roslyn_ls", {
+        default_config = {
+          cmd = {
+            "roslyn-language-server",
+            "--logLevel",
+            "Information",
+          },
+          filetypes = { "cs" },
+          root_dir = function(fname)
+            return lspconfig.util.root_pattern("*.sln", "*.slnx", "*.csproj")(fname)
+          end,
+          init_options = {
+            enableInlineDiagnostics = true,
+          },
+          settings = {
+            ["csharp"] = {
+              inlayHints = {
+                enable = true,
+              },
+              suggest = {
+                includeSymbolsFromUnimportedNamespaces = true,
+              },
+            },
+          },
+        },
+      })
+
+      vim.lsp.enable("roslyn_ls")
+    end,
   },
 }
