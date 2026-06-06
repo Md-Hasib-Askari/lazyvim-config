@@ -8,8 +8,9 @@ local map = vim.keymap.set
 -- defaults: save=<C-s>, quit=<leader>qq, grep=<leader>sg or <leader>/,
 -- buffers=<leader>,, help=<leader>sh, and <Esc> already clears search highlight.
 
--- Copy current file's absolute path to system clipboard
-map("n", "<leader>fp", ':let @+ = expand("%:p")<CR>', { desc = "Copy file path" })
+-- Copy current file path to system clipboard
+map("n", "<leader>fp", ':let @+ = expand("%")<CR>', { desc = "Copy relative file path" })
+map("n", "<leader>fP", ':let @+ = expand("%:p")<CR>', { desc = "Copy absolute file path" })
 
 -- Open the LazyVim dashboard (home page, the snacks.nvim start screen)
 map("n", "<leader>h", function()
