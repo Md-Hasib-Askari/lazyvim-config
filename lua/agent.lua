@@ -767,7 +767,8 @@ local TOOLS = {
   {
     name = "write_file",
     arg = "<path>",
-    help = "create/replace a file (content in a following fenced block); shown as a diff",
+    help = "create or replace a file — put the full new content in a fenced block right after this tool block:",
+    note = "    ```tool\n    write_file src/services/auth.py\n    ```\n    ```python\n    def verify(token: str) -> bool:\n        return token == SECRET\n    ```",
     write = true,
   },
 }
@@ -785,6 +786,9 @@ for _, t in ipairs(TOOLS) do
   table.insert(tool_names, t.name)
   local sig = t.arg ~= "" and (t.name .. " " .. t.arg) or t.name
   table.insert(sig_lines, ("  %-26s %s"):format(sig, t.help))
+  if t.note then
+    table.insert(sig_lines, t.note)
+  end
 end
 
 local TOOL_NAMES_CSV = table.concat(tool_names, ", ")
