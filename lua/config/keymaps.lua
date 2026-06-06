@@ -8,6 +8,11 @@ local map = vim.keymap.set
 -- defaults: save=<C-s>, quit=<leader>qq, grep=<leader>sg or <leader>/,
 -- buffers=<leader>,, help=<leader>sh, and <Esc> already clears search highlight.
 
+-- Open the LazyVim dashboard (home page, the snacks.nvim start screen)
+map("n", "<leader>h", function()
+  Snacks.dashboard()
+end, { desc = "Home (Dashboard)" })
+
 -- Yank the diagnostic message under the cursor to the system clipboard.
 map("n", "<leader>y", function()
   local diag = vim.diagnostic.get(0, { lnum = vim.fn.line(".") - 1 })[1]
