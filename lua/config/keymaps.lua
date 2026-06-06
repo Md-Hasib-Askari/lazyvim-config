@@ -17,6 +17,10 @@ map("n", "<leader>h", function()
   Snacks.dashboard()
 end, { desc = "Home (Dashboard)" })
 
+-- LSP code actions (quick fixes)
+map("n", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
+map("v", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
+
 -- Yank the diagnostic message under the cursor to the system clipboard.
 map("n", "<leader>y", function()
   local diag = vim.diagnostic.get(0, { lnum = vim.fn.line(".") - 1 })[1]
