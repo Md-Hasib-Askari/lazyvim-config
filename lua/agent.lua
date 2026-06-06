@@ -249,7 +249,7 @@ local preview_and_commit
 -- ======================================================
 
 function M.init()
-  copy([[
+  local prompt = [[
 You are a senior software engineer acting as a Neovim coding agent.
 
 CONTEXT TOOLS (use these instead of guessing):
@@ -317,7 +317,24 @@ RULES:
 * No explanations
 * No extra text
 * Always include file name
-  ]])
+  ]]
+
+  -- If CLAUDE.md exists at the repo root, include it as project context
+  -- so the agent is aware of project conventions, architecture, and commands.
+  local root = repo_root()
+  local claude_path = root .. "/CLAUDE.md"
+  if vim.fn.filereadable(claude_path) == 1 then
+    local ok, lines = pcall(vim.fn.readfile, claude_path)
+    if ok and type(lines) == "table" and #lines > 0 then
+      local content = table.concat(lines, "\n")
+      prompt = "PROJECT CONTEXT (CLAUDE.md from repo root — follow these conventions):\n\n```markdown\n"
+        .. content
+        .. "\n```\n\n"
+        .. prompt
+    end
+  end
+
+  copy(prompt)
 end
 
 -- ======================================================
