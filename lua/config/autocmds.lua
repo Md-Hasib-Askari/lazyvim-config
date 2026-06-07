@@ -32,3 +32,17 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     end
   end,
 })
+
+-- Auto-save buffers when text changes (e.g. after accepting a tool-applied
+-- diff) or when leaving Insert mode. Uses `update` so it only writes if the
+-- buffer is actually modified. Skips special buffers and unnamed buffers.
+vim.api.nvim_create_autocmd({ "TextChanged", "InsertLeave" }, {
+  group = vim.api.nvim_create_augroup("user_auto_save", { clear = true }),
+  callback = function(args)
+    local buf = args.buf
+    if vim.bo[buf].buftype ~= "" or not vim.bo[buf].modifiable then
+      return
+    end
+    vim.cmd("silent! update")
+  end,
+})

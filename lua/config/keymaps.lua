@@ -8,6 +8,9 @@ local map = vim.keymap.set
 -- defaults: save=<C-s>, quit=<leader>qq, grep=<leader>sg or <leader>/,
 -- buffers=<leader>,, help=<leader>sh, and <Esc> already clears search highlight.
 
+-- Select all text in the buffer
+map("n", "<C-a>", "gg0vG$", { desc = "Select all" })
+
 -- Copy current file path to system clipboard
 map("n", "<leader>fp", ':let @+ = expand("%")<CR>', { desc = "Copy relative file path" })
 map("n", "<leader>fP", ':let @+ = expand("%:p")<CR>', { desc = "Copy absolute file path" })
