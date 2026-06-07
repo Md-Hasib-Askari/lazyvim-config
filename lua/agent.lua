@@ -897,11 +897,19 @@ function M.tool()
       label = ("[write %d/%d] %s"):format(i, #writes, w.path),
       on_done = function(outcome)
         local status = ({
-          applied = "applied to buffer (pending :w)",
+          applied = "applied and saved",
           cancelled = "rejected by user",
           nochange = "no change (identical content)",
         })[outcome] or tostring(outcome)
         table.insert(results, ("TOOL RESULT — %s\n%s"):format(w.line, status))
+        -- Copy results to clipboard immediately so the user can paste back
+        -- to the model without waiting for all writes to finish.
+        copy(
+          "TOOL RESULTS (paste back to continue):\n\n"
+            .. table.concat(results, "\n\n")
+            .. "\n\n"
+            .. tools_reminder
+        )
         run_writes(i + 1)
       end,
     })
@@ -1269,7 +1277,8 @@ function preview_and_commit(new_lines, opts)
     end
     if accept and vim.api.nvim_buf_is_valid(target_buf) then
       vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, new_lines)
-      notify(tag .. "Applied -- review and :w to save")
+      vim.cmd("silent! update")
+      notify(tag .. "Applied and saved")
     elseif not accept then
       notify(tag .. "Cancelled -- buffer unchanged", vim.log.levels.WARN)
     end
