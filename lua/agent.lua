@@ -1313,7 +1313,7 @@ function preview_and_commit(new_lines, opts)
   local tag = opts.label and (opts.label .. " ") or ""
   local function chain(outcome)
     if opts.on_done then
-      opts.on_done(outcome)
+      vim.schedule(function() opts.on_done(outcome) end)
     end
   end
 
@@ -1322,7 +1322,7 @@ function preview_and_commit(new_lines, opts)
   local old_lines = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
 
   if vim.deep_equal(old_lines, new_lines) then
-    notify(tag .. "No changes to apply")
+    notify(tag .. "No changes to apply", vim.log.levels.INFO)
     chain("nochange")
     return
   end
