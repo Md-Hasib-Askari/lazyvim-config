@@ -206,8 +206,11 @@ end
 -- responses stay compatible with M.apply's parser.
 -- ======================================================
 
--- For prompts that should return a unified diff (apply via <leader>aa).
-local DIFF_RULES = [[Diff requirements (STRICT — the patch is applied programmatically):
+-- Diff rules shared between the system prompt and task commands that request
+-- diffs. These are embedded directly in the system prompt now; task commands
+-- reference them when requesting diff output.
+local DIFF_RULES =
+  [[Apply changes using the patch_file tool inside a <tool> block. Diff requirements (STRICT — the patch is applied programmatically):
 * Every hunk MUST start with a proper @@ -<old>,<n> +<new>,<m> @@ header.
 * Include at least 3 lines of UNCHANGED context above and below each change.
 * The FIRST character of every line is the marker, with NO space after it:
@@ -243,6 +246,8 @@ local tool_signatures
 -- Forward declaration: defined in the APPLY ENGINE section but called earlier
 -- by M.tool's write_file handling. Assigned once at load time.
 local preview_and_commit
+local git_apply_lines -- forward declaration for patch_file support
+local context_apply_lines -- forward declaration for patch_file support
 
 -- ======================================================
 -- INIT (CRITICAL: enforce structured output)
@@ -280,74 +285,68 @@ Tool rules:
 * The bash tool runs commands in the repo root. The user must confirm before
   execution, so prefer read-only commands (ls, cat, git log) when possible.
 
-WRITING FILES:
-To write a file, put write_file <path> inside a <tool> block followed by a
-fenced code block with the content. You can write MULTIPLE files in one <tool>
-block. Each write_file gets its own fenced block. Example:he change is shown to me as a diff to accept or reject. Example:
+FILE CHANGES — use one of two tools inside <tool> blocks:
 
+1. write_file <path> — for NEW files or complete rewrites. Provide full content:
+ 
 <tool>
 write_file src/Domain/Interfaces/IFoo.cs
 
-```csharp
-namespace Domain.Interfaces;
-
-public interface IFoo { }
-```
-
-write_file src/Domain/Models/AppConfig.cs
-```csharp 
-namespace Domain.Models; 
-
-public class AppConfig { } 
-```
+ ```csharp
+ namespace Domain.Interfaces;
+ 
+ public interface IFoo { }
+ ```
 </tool>
 
+2. patch_file <path> — for modifying EXISTING files (PREFERRED). Provide a
+   unified diff in a ```diff block:
 
-════════════════════════════════════════════════════════════════════════════════
-OUTPUT FORMAT (STRICT):
-════════════════════════════════════════════════════════════════════════════════
-
-Use <tool> blocks for ALL context gathering and file writing. Only use the
-formats below for your FINAL answer after you have gathered all context.
-
-Return ONLY ONE format. Prefer FORMAT 1 (patch); use FORMAT 2 (full file) only
-for a new file or a near-total rewrite.
-
-FORMAT 1 — PATCH MODE:
-File: <path>
-Type: patch
+<tool>
+patch_file src/Domain/Services/AuthService.cs
 
 ```diff
-<unified diff only>
-```
+@@ -10,7 +10,7 @@
+public class AppConfig { }
+ public context line
+   another context line
+-  old logic here
++  new logic here
+   trailing context line
+ ```
+</tool>
 
-]] .. DIFF_RULES .. [[
+Prefer patch_file over write_file whenever possible — it's faster to review
+and less error-prone than rewriting an entire file.
 
-
-FORMAT 2 — FULL FILE MODE:
-File: <path>
-Type: full
-
-```<lang>
-<entire file>
-```
+DIFF RULES (STRICT — patches are applied programmatically):
+* Every hunk MUST start with a proper @@ -<old>,<n> +<new>,<m> @@ header.
+* Include at least 3 lines of UNCHANGED context above and below each change.
+* The FIRST character of every line is the marker, with NO space after it:
+  "-" = removed line, "+" = added line, " " (single space) = unchanged context.
+  The line's real content begins at column 2. Do NOT write "- code" (that adds a
+  spurious leading space); write "-code".
+* Only changed lines get "-"/"+". Unchanged lines stay as " " context — never
+  mark an identical line as both removed and added.
+* Do not abbreviate, elide, or write "..." inside the diff.
+* Keep indentation/whitespace byte-for-byte identical to the source.
 
 RULES:
 * No explanations
 * No extra text
-* Always include file name
-* Use <tool> blocks FIRST to read files, THEN produce your final answer
+* Use <tool> blocks for ALL context gathering AND file changes
+* ALWAYS read files before modifying them — never guess contents
   ]]
 
-  -- If CLAUDE.md exists at the repo root, include it as project context
+  -- If AGENT.md exists at the repo root, include it as project context
   -- so the agent is aware of project conventions, architecture, and commands.
   local root = repo_root()
-  local claude_path = root .. "/CLAUDE.md"
-  if vim.fn.filereadable(claude_path) == 1 then
-    local ok, lines = pcall(vim.fn.readfile, claude_path)
+  local agent_path = root .. "/AGENT.md"
+  if vim.fn.filereadable(agent_path) == 1 then
+    local ok, lines = pcall(vim.fn.readfile, agent_path)
     if ok and type(lines) == "table" and #lines > 0 then
       local content = table.concat(lines, "\n")
-      prompt = "PROJECT CONTEXT (CLAUDE.md from repo root — follow these conventions):\n\n```markdown\n"
+      prompt = "PROJECT CONTEXT (AGENT.md from repo root — follow these conventions):\n\n```markdown\n"
         .. content
         .. "\n```\n\n"
         .. prompt
@@ -361,7 +360,7 @@ end
 -- PROJECT INIT (analogous to Claude Code's /init)
 -- Gathers a compact repo overview and builds a "document this codebase"
 -- prompt. Like every other command it only fills the clipboard: paste into
--- your LLM, then save the reply as CLAUDE.md (or apply it as a new file).
+-- your LLM, then save the reply as AGENT.md (or apply it as a new file).
 -- ======================================================
 
 -- Read up to max_lines from a file; returns nil on any error.
@@ -460,7 +459,7 @@ function M.init_project()
 
   local instructions = [[
 You are documenting a codebase for engineers and AI agents. From the repository
-overview below, write a CLAUDE.md in Markdown with these sections (infer from
+overview below, write a AGENT.md in Markdown with these sections (infer from
 the files provided; do NOT invent features that aren't evidenced):
 
 # Project Overview   — what it is, primary language/framework, purpose
@@ -469,7 +468,7 @@ the files provided; do NOT invent features that aren't evidenced):
 # Conventions        — code style, naming and patterns you can infer
 # Key Directories    — one line each for the important folders
 
-Output ONLY the CLAUDE.md contents inside a single fenced ```markdown block.]]
+Output ONLY the AGENT.md contents inside a single fenced ```markdown block.]]
 
   copy(instructions .. "\n\nREPOSITORY OVERVIEW:\n\n" .. overview)
 end
@@ -503,7 +502,7 @@ local function strip_outer_fence(text)
   return table.concat(out, "\n")
 end
 
--- Drop the LLM's markdown reply (from the clipboard) into a CLAUDE.md buffer at
+-- Drop the LLM's markdown reply (from the clipboard) into a AGENT.md buffer at
 -- the repo root, ready to review and :w. Pairs with M.init_project. Never
 -- touches disk -- you save when happy.
 function M.write_doc()
@@ -516,7 +515,7 @@ function M.write_doc()
   local body = strip_outer_fence(resp)
 
   local root = repo_root()
-  local path = root .. "/CLAUDE.md"
+  local path = root .. "/AGENT.md"
   local existed = vim.fn.filereadable(path) == 1
 
   vim.cmd.edit(vim.fn.fnameescape(path))
@@ -524,7 +523,7 @@ function M.write_doc()
   vim.bo.filetype = "markdown"
 
   notify(
-    existed and "CLAUDE.md exists -- buffer overwritten, review then :w" or "CLAUDE.md ready in buffer -- :w to save"
+    existed and "AGENT.md exists -- buffer overwritten, review then :w" or "AGENT.md ready in buffer -- :w to save"
   )
 end
 
@@ -791,6 +790,13 @@ local TOOLS = {
     note = "    <tool>\n    write_file src/services/auth.py\n\n    ```python\n    def verify(token: str) -> bool:\n        return token == SECRET\n    ```\n    </tool>",
     write = true,
   },
+  {
+    name = "patch_file",
+    arg = "<path>",
+    help = "apply a unified diff to an existing file — put the diff in a fenced ```diff block inside the same <tool> block:",
+    note = "    <tool>\n    patch_file src/services/auth.py\n\n    ```diff\n    @@ -3,5 +3,5 @@\n     unchanged context line\n    -old line to remove\n    +new line to add\n     trailing context line\n    ```\n    </tool>",
+    patch = true,
+  },
 }
 
 -- Derive the dispatch map (name/alias -> spec), the signature list and the
@@ -875,7 +881,7 @@ function M.tool()
 
   local root = repo_root()
   local results = {}
-  local writes = {} -- queued write_file calls, applied via preview after reads
+  local operations = {} -- queued write_file/patch_file calls, applied via preview after reads
   local heavy_used = 0
 
   local content_idx = 0
@@ -883,18 +889,21 @@ function M.tool()
     if line ~= "" then
       local name, args = line:match("^(%S+)%s*(.*)$")
       local tool = TOOL_BY_NAME[name]
-      if tool and tool.write then
+      if tool and (tool.write or tool.patch) then
         content_idx = content_idx + 1
         local content = content_blocks[content_idx]
         if not content then
           table.insert(
             results,
-            ("TOOL RESULT — %s\nERROR: provide the file content in a fenced block inside the <tool> block"):format(
-              line
-            )
+            ("TOOL RESULT — %s\nERROR: provide the content in a fenced block inside the <tool> block"):format(line)
           )
         else
-          table.insert(writes, { path = vim.trim(args), content = content, line = line })
+          table.insert(operations, {
+            path = vim.trim(args),
+            content = content,
+            line = line,
+            type = tool.patch and "patch" or "write",
+          })
         end
       else
         local out
@@ -915,7 +924,7 @@ function M.tool()
     end
   end
 
-  if #results == 0 and #writes == 0 then
+  if #results == 0 and #operations == 0 then
     notify("<tool> block was empty", vim.log.levels.WARN)
     return
   end
@@ -924,42 +933,78 @@ function M.tool()
     copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder)
   end
 
-  -- Reads are done; now preview each write_file in turn, then copy everything.
-  if #writes == 0 then
+  -- Reads are done; now preview each operation in turn, then copy everything.
+  if #operations == 0 then
     finalize()
     return
   end
 
-  local function run_writes(i)
-    if i > #writes then
+  local function run_operations(i)
+    if i > #operations then
       finalize()
       return
     end
-    local w = writes[i]
-    local abs, err = safe_path(root, w.path)
+    local op = operations[i]
+    local abs, err = safe_path(root, op.path)
     if not abs then
-      table.insert(results, ("TOOL RESULT — %s\nERROR: %s"):format(w.line, err))
-      run_writes(i + 1)
+      table.insert(results, ("TOOL RESULT — %s\nERROR: %s"):format(op.line, err))
+      run_operations(i + 1)
       return
     end
     vim.cmd.edit(vim.fn.fnameescape(abs)) -- new files open as an empty buffer
-    preview_and_commit(vim.split(w.content, "\n"), {
-      label = ("[write %d/%d] %s"):format(i, #writes, w.path),
-      on_done = function(outcome)
-        local status = ({
-          applied = "applied and saved",
-          cancelled = "rejected by user",
-          nochange = "no change (identical content)",
-        })[outcome] or tostring(outcome)
-        table.insert(results, ("TOOL RESULT — %s\n%s"):format(w.line, status))
-        -- Copy results to clipboard immediately so the user can paste back
-        -- to the model without waiting for all writes to finish.
-        copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder)
-        run_writes(i + 1)
-      end,
-    })
+
+    if op.type == "patch" then
+      -- Apply diff to compute proposed lines, then preview
+      local lines, perr
+      if op.content:match("@@") then
+        lines, perr = git_apply_lines(op.content)
+      end
+      if not lines then
+        lines, perr = context_apply_lines(op.content)
+      end
+      if not lines then
+        table.insert(
+          results,
+          ("TOOL RESULT — %s\nERROR: could not apply diff: %s"):format(op.line, perr or "unknown")
+        )
+        run_operations(i + 1)
+        return
+      end
+      preview_and_commit(lines, {
+        label = ("[patch %d/%d] %s"):format(i, #operations, op.path),
+        on_done = function(outcome)
+          local status = ({
+            applied = "applied and saved",
+            cancelled = "rejected by user",
+            nochange = "no change (identical content)",
+          })[outcome] or tostring(outcome)
+          table.insert(results, ("TOOL RESULT — %s\n%s"):format(op.line, status))
+          copy(
+            "TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder
+          )
+          run_operations(i + 1)
+        end,
+      })
+    else
+      -- write_file: full replacement
+      preview_and_commit(vim.split(op.content, "\n"), {
+        label = ("[write %d/%d] %s"):format(i, #operations, op.path),
+        on_done = function(outcome)
+          local status = ({
+            applied = "applied and saved",
+            cancelled = "rejected by user",
+            nochange = "no change (identical content)",
+          })[outcome] or tostring(outcome)
+          table.insert(results, ("TOOL RESULT — %s\n%s"):format(op.line, status))
+          copy(
+            "TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder
+          )
+          run_operations(i + 1)
+        end,
+      })
+    end
   end
-  run_writes(1)
+  run_operations(1)
 end
 
 -- ======================================================
@@ -983,7 +1028,7 @@ end
 function M.fix()
   local err = vim.fn.input("Error: ")
   -- Full-file context is included, so a precise unified diff is feasible.
-  copy(("Fix this error:\n%s\n\nContext:\n%s\n\n%s"):format(err, context(true), DIFF_RULES))
+  copy(("Fix this error:\n%s\n\nContext:\n%s\n\nUse patch_file to apply the fix."):format(err, context(true)))
 end
 
 function M.refactor()
@@ -1067,7 +1112,7 @@ end
 -- We dump the buffer to a throwaway copy, git-apply onto that copy, then load the
 -- result back. This keeps unsaved edits + undo intact and avoids the W12 desync
 -- you get from patching the real file out from under a modified buffer.
-local function git_apply_lines(diff)
+function git_apply_lines(diff)
   if not diff:match("@@") then
     return nil, "diff has no @@ hunk header"
   end
@@ -1127,7 +1172,7 @@ end
 -- (context + additions), locating the old block verbatim in the buffer, and
 -- swapping in the new block. Refuses to guess when the match is missing or
 -- ambiguous, so it never half-applies the way the old parser did.
-local function context_apply_lines(diff)
+function context_apply_lines(diff)
   local old_lines, new_lines = {}, {}
   for _, l in ipairs(vim.split(diff, "\n")) do
     if

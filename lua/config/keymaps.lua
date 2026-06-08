@@ -56,7 +56,7 @@ end, { desc = "Open Claude with current file" })
 -- ------------------------------------------------------
 -- Prompt builders (copy a prompt to the clipboard):
 --   <leader>ai  init        system prompt: tool protocol + output format
---   <leader>aI  init_proj   "document this repo" -> CLAUDE.md (like /init)
+--   <leader>aI  init_proj   "document this repo" -> AGENT.md (like /init)
 --   <leader>ap  plan        goal + context -> step-by-step plan
 --   <leader>ax  context     ~20 lines around the cursor
 --   <leader>af  fix         error message + file context (asks for a diff)
@@ -68,7 +68,7 @@ end, { desc = "Open Claude with current file" })
 --   <leader>aa  apply       auto-detects: run tools (find_file/read_file/grep/
 --                           list_dir/git_diff/write_file) OR apply a diff/full
 --                           reply (single or multi-file) with a colored preview
---   <leader>aW  write_doc   drop an LLM markdown reply into a CLAUDE.md buffer
+--   <leader>aW  write_doc   drop an LLM markdown reply into a AGENT.md buffer
 -- Ex commands mirror these; :AgentTool forces tool-only handling, and
 -- :AgentAddFile / :AgentCode / :AgentDiff / :AgentRefactor have no keymap.
 -- ======================================================
@@ -102,8 +102,8 @@ end
 -- ======================================================
 
 vim.keymap.set({ "n", "x" }, "<leader>ai", agent.init, opts("Initialize prompt"))
-vim.keymap.set("n", "<leader>aI", agent.init_project, opts("Document repo (CLAUDE.md)"))
-vim.keymap.set("n", "<leader>aW", agent.write_doc, opts("Write reply to CLAUDE.md buffer"))
+vim.keymap.set("n", "<leader>aI", agent.init_project, opts("Document repo (AGENT.md)"))
+vim.keymap.set("n", "<leader>aW", agent.write_doc, opts("Write reply to AGENT.md buffer"))
 vim.keymap.set({ "n", "x" }, "<leader>ap", sel(agent.plan), opts("Plan task"))
 vim.keymap.set({ "n", "x" }, "<leader>ax", agent.context, opts("Surrounding context"))
 vim.keymap.set({ "n", "x" }, "<leader>af", sel(agent.fix), opts("Fix error"))
@@ -119,8 +119,8 @@ vim.keymap.set({ "n", "x" }, "<leader>aa", sel(agent.apply), opts("Apply / run t
 -- ======================================================
 
 vim.api.nvim_create_user_command("AgentInit", agent.init, { desc = "Agent: Initialize prompt" })
-vim.api.nvim_create_user_command("AgentInitProject", agent.init_project, { desc = "Agent: Document repo (CLAUDE.md)" })
-vim.api.nvim_create_user_command("AgentWriteDoc", agent.write_doc, { desc = "Agent: Write reply to CLAUDE.md buffer" })
+vim.api.nvim_create_user_command("AgentInitProject", agent.init_project, { desc = "Agent: Document repo (AGENT.md)" })
+vim.api.nvim_create_user_command("AgentWriteDoc", agent.write_doc, { desc = "Agent: Write reply to AGENT.md buffer" })
 vim.api.nvim_create_user_command("AgentTool", agent.tool, { desc = "Agent: Run tool call from clipboard" })
 vim.api.nvim_create_user_command("AgentAddFile", agent.add_file, { desc = "Agent: Add current file" })
 vim.api.nvim_create_user_command("AgentContext", agent.context, { desc = "Agent: Surrounding context" })
