@@ -49,8 +49,8 @@ end, { desc = "Open Claude with current file" })
 -- ------------------------------------------------------
 -- Typical loop:
 --   <leader>ai  set up the chat (copies the system prompt) -> paste into LLM
---   ask your question; the LLM replies with a ```tool block OR a final answer
---   <leader>aa  ONE key: runs a ```tool block (copies results to paste back),
+--   ask your question; the LLM replies with a <tool>…</tool> block OR a final answer
+--   <leader>aa  ONE key: runs a <tool>…</tool> block (copies results to paste back),
 --               or previews+applies a diff/Type:full reply (ga apply, q cancel)
 --   repeat until done; :w to save (apply only touches buffers, never disk)
 -- ------------------------------------------------------

@@ -252,36 +252,41 @@ function M.init()
   local prompt = [[
 You are a senior software engineer acting as a Neovim coding agent.
 
-CONTEXT TOOLS (use these instead of guessing):
+════════════════════════════════════════════════════════════════════════════════
+TOOL PROTOCOL (MANDATORY — ALWAYS USE TOOLS BEFORE ANSWERING)
+════════════════════════════════════════════════════════════════════════════════
+
+You MUST use tools to gather context before writing any code. NEVER guess file
+contents, directory structure, or existing code. Always verify with tools first.
 
 If you need code or files that were not provided, request them and STOP — do not
-also answer in the same reply. Emit ONLY a tool block, one call per line, e.g.:
+also answer in the same reply. Emit ONLY a <tool> block, e.g.:
 
-```tool
+<tool>
 find_file AppDbContext.cs
 read_file src/Domain/Entities/Project.cs:1-40
-```
+</tool>
 
 Available tools:
 ]] .. tool_signatures .. [[
 
-Rules for tools:
+Tool rules:
 * Paths are relative to the repo root. Never request files outside it.
 * You may request several tools at once (one per line), but only a few file
   reads per turn -- use find_file/grep to narrow down, then read what you need.
 * I will run them and paste the results back, then you continue.
-* NEVER invent file contents — request the file instead.
+* NEVER invent file contents — request the file instead. This is the #1 rule.
 
 * The bash tool runs commands in the repo root. The user must confirm before
   execution, so prefer read-only commands (ls, cat, git log) when possible.
 
-To WRITE a file mid-task, put write_file <path> in the tool block and provide
-its content in a fenced block AFTER the tool block (one block per write_file, in
-order). The change is shown to me as a diff to accept or reject. Example:
+WRITING FILES:
+To write a file, put write_file <path> inside a <tool> block followed by a
+fenced code block with the content. You can write MULTIPLE files in one <tool>
+block. Each write_file gets its own fenced block. Example:he change is shown to me as a diff to accept or reject. Example:
 
-```tool
+<tool>
 write_file src/Domain/Interfaces/IFoo.cs
-```
 
 ```csharp
 namespace Domain.Interfaces;
@@ -289,7 +294,21 @@ namespace Domain.Interfaces;
 public interface IFoo { }
 ```
 
+write_file src/Domain/Models/AppConfig.cs
+```csharp 
+namespace Domain.Models; 
+
+public class AppConfig { } 
+```
+</tool>
+
+
+════════════════════════════════════════════════════════════════════════════════
 OUTPUT FORMAT (STRICT):
+════════════════════════════════════════════════════════════════════════════════
+
+Use <tool> blocks for ALL context gathering and file writing. Only use the
+formats below for your FINAL answer after you have gathered all context.
 
 Return ONLY ONE format. Prefer FORMAT 1 (patch); use FORMAT 2 (full file) only
 for a new file or a near-total rewrite.
@@ -317,6 +336,7 @@ RULES:
 * No explanations
 * No extra text
 * Always include file name
+* Use <tool> blocks FIRST to read files, THEN produce your final answer
   ]]
 
   -- If CLAUDE.md exists at the repo root, include it as project context
@@ -510,7 +530,7 @@ end
 
 -- ======================================================
 -- CONTEXT TOOLS (simulated tool calling)
--- The LLM emits a ```tool block requesting files/searches; M.tool() runs the
+-- The LLM emits a <tool>…</tool> block requesting files/searches; M.tool() runs the
 -- read-only request and copies the result back for you to paste. A manual
 -- ReAct loop where you are the runtime.
 -- ======================================================
@@ -767,8 +787,8 @@ local TOOLS = {
   {
     name = "write_file",
     arg = "<path>",
-    help = "create or replace a file — put the full new content in a fenced block right after this tool block:",
-    note = "    ```tool\n    write_file src/services/auth.py\n    ```\n    ```python\n    def verify(token: str) -> bool:\n        return token == SECRET\n    ```",
+    help = "create or replace a file — put the full new content in a fenced code block inside the same <tool> block:",
+    note = "    <tool>\n    write_file src/services/auth.py\n\n    ```python\n    def verify(token: str) -> bool:\n        return token == SECRET\n    ```\n    </tool>",
     write = true,
   },
 }
@@ -797,7 +817,7 @@ tool_signatures = table.concat(sig_lines, "\n") -- assign the forward-declared u
 -- Re-stated at the end of every TOOL RESULTS message so the protocol stays in
 -- context as a long conversation pushes the original system prompt out of focus.
 local tools_reminder = "---\n"
-  .. "Need more context? Reply with ONLY a ```tool block (one call per line):\n"
+  .. "Need more context? Reply with ONLY a <tool> block (one call per line):\n"
   .. tool_signatures
   .. ("\nRequest at most %d files per turn; ask for the rest next turn."):format(TOOL_MAX_FILES_PER_TURN)
   .. "\nOtherwise, reply with your final answer in the required output format."
@@ -809,27 +829,57 @@ function M.tool()
     return
   end
 
-  local block_start, block_end, block = resp:find("```tool%s*\n(.-)\n```")
-  if not block then
-    notify("No ```tool block found in clipboard", vim.log.levels.WARN)
-    return
+  -- Walk the response line by line, collecting tool-call lines and write_file
+  -- content from <tool>…</tool> blocks. Fenced code blocks inside <tool>
+  -- provide content for write_file calls. This is unambiguous because </tool>
+  -- never appears inside markdown fences.
+  local tool_lines = {}
+  local content_blocks = {}
+  local resp_lines = vim.split(resp, "\n")
+  local i = 1
+  while i <= #resp_lines do
+    local line = resp_lines[i]
+    if line:match("^<tool>%s*$") then
+      -- Inside a <tool> block: collect tool-call lines and content blocks
+      i = i + 1
+      while i <= #resp_lines and not resp_lines[i]:match("^</tool>%s*$") do
+        local inner = resp_lines[i]
+        if inner:match("^```%w*") then
+          -- Fenced code block inside <tool>: write_file content
+          local body = {}
+          i = i + 1
+          while i <= #resp_lines and not resp_lines[i]:match("^```%s*$") do
+            table.insert(body, resp_lines[i])
+            i = i + 1
+          end
+          i = i + 1 -- skip closing ```
+          table.insert(content_blocks, table.concat(body, "\n"))
+        else
+          local trimmed = vim.trim(inner)
+          if trimmed ~= "" then
+            table.insert(tool_lines, trimmed)
+          end
+          i = i + 1
+        end
+      end
+      i = i + 1 -- skip </tool>
+    else
+      i = i + 1
+    end
   end
 
-  -- write_file pulls its content from fenced blocks AFTER the tool block, in
-  -- order. Collect them up front.
-  local content_blocks = {}
-  for body in resp:sub(block_end + 1):gmatch("```%w*\n(.-)\n```") do
-    table.insert(content_blocks, body)
+  if #tool_lines == 0 then
+    notify("No <tool> block found in clipboard", vim.log.levels.WARN)
+    return
   end
 
   local root = repo_root()
   local results = {}
   local writes = {} -- queued write_file calls, applied via preview after reads
   local heavy_used = 0
-  local content_idx = 0
 
-  for _, raw in ipairs(vim.split(block, "\n")) do
-    local line = vim.trim(raw)
+  local content_idx = 0
+  for _, line in ipairs(tool_lines) do
     if line ~= "" then
       local name, args = line:match("^(%S+)%s*(.*)$")
       local tool = TOOL_BY_NAME[name]
@@ -839,7 +889,7 @@ function M.tool()
         if not content then
           table.insert(
             results,
-            ("TOOL RESULT — %s\nERROR: provide the file content in a fenced block after the ```tool block"):format(
+            ("TOOL RESULT — %s\nERROR: provide the file content in a fenced block inside the <tool> block"):format(
               line
             )
           )
@@ -866,7 +916,7 @@ function M.tool()
   end
 
   if #results == 0 and #writes == 0 then
-    notify("```tool block was empty", vim.log.levels.WARN)
+    notify("<tool> block was empty", vim.log.levels.WARN)
     return
   end
 
@@ -904,12 +954,7 @@ function M.tool()
         table.insert(results, ("TOOL RESULT — %s\n%s"):format(w.line, status))
         -- Copy results to clipboard immediately so the user can paste back
         -- to the model without waiting for all writes to finish.
-        copy(
-          "TOOL RESULTS (paste back to continue):\n\n"
-            .. table.concat(results, "\n\n")
-            .. "\n\n"
-            .. tools_reminder
-        )
+        copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder)
         run_writes(i + 1)
       end,
     })
@@ -1277,7 +1322,14 @@ function preview_and_commit(new_lines, opts)
     end
     if accept and vim.api.nvim_buf_is_valid(target_buf) then
       vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, new_lines)
-      vim.cmd("silent! update")
+      -- Save the target buffer to disk. writefile is the most reliable way
+      -- (doesn't depend on buftype, window focus, or autocommands). Mark the
+      -- buffer as unmodified afterwards so it doesn't show as dirty.
+      local bufname = vim.api.nvim_buf_get_name(target_buf)
+      if bufname ~= "" then
+        vim.fn.writefile(new_lines, bufname)
+        vim.bo[target_buf].modified = false
+      end
       notify(tag .. "Applied and saved")
     elseif not accept then
       notify(tag .. "Cancelled -- buffer unchanged", vim.log.levels.WARN)
@@ -1405,9 +1457,9 @@ function M.apply()
     return
   end
 
-  -- A ```tool block means the model is requesting context or writing files via
+  -- A <tool>…</tool> block means the model is requesting context or writing files via
   -- the tool loop -- delegate. Otherwise this is a final answer to apply.
-  if resp:match("```tool%s*\n.-\n```") then
+  if resp:match("<tool") and resp:match("</tool>") then
     return M.tool()
   end
 
