@@ -8,6 +8,9 @@ local map = vim.keymap.set
 -- defaults: save=<C-s>, quit=<leader>qq, grep=<leader>sg or <leader>/,
 -- buffers=<leader>,, help=<leader>sh, and <Esc> already clears search highlight.
 
+-- Undo in insert mode
+map("i", "<M-u>", "<C-o>u", { desc = "Undo in insert mode" })
+
 -- LSP Rename
 vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename, { desc = "LSP Rename" })
 
@@ -158,3 +161,18 @@ vim.api.nvim_create_user_command(
   agent.apply,
   { range = true, desc = "Agent: Apply diff/code to selection" }
 )
+
+-- =======================================================
+-- COPILOT KEYMAPS
+-- =======================================================
+-- toggle copilot with <leader>ux (g for "generate")
+-- :Copilot enable/disable only works for the current buffer, so this toggle is per-buffer as well
+vim.keymap.set("n", "<leader>ug", function()
+  if vim.g.copilot_enabled == false then
+    vim.cmd("Copilot enable")
+    vim.notify("Copilot enabled")
+  else
+    vim.cmd("Copilot disable")
+    vim.notify("Copilot disabled")
+  end
+end, { desc = "Toggle Copilot" })
