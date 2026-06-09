@@ -165,14 +165,9 @@ vim.api.nvim_create_user_command(
 -- =======================================================
 -- COPILOT KEYMAPS
 -- =======================================================
--- toggle copilot with <leader>ux (g for "generate")
--- :Copilot enable/disable only works for the current buffer, so this toggle is per-buffer as well
-vim.keymap.set("n", "<leader>ug", function()
-  if vim.g.copilot_enabled == false then
-    vim.cmd("Copilot enable")
-    vim.notify("Copilot enabled")
-  else
-    vim.cmd("Copilot disable")
-    vim.notify("Copilot disabled")
-  end
-end, { desc = "Toggle Copilot" })
+-- disable copilot with <leader>ux
+-- :Copilot disable only works for the current buffer
+vim.keymap.set("n", "<leader>ux", function()
+  vim.cmd("Copilot disable")
+  vim.notify("Copilot disabled")
+end, { desc = "Disable Copilot" })
