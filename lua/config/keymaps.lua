@@ -23,6 +23,17 @@ map("n", "<leader>h", function()
   Snacks.dashboard()
 end, { desc = "Home (Dashboard)" })
 
+-- Append a semicolon to the end of the current line (if not already there)
+map("n", "<leader>;", function()
+  local line = vim.api.nvim_get_current_line()
+  if line:match(";%s*$") then
+    return
+  end
+  vim.cmd("normal! A;")
+end, { desc = "Add semicolon at end of line" })
+-- Visual mode: append to all selected lines
+map("x", "<leader>;", ":normal A;<CR>", { desc = "Add semicolon at end of selected lines" })
+
 -- LSP code actions (quick fixes)
 map("n", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
 map("v", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
