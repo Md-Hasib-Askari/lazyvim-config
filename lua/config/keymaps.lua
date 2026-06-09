@@ -34,6 +34,10 @@ end, { desc = "Add semicolon at end of line" })
 -- Visual mode: append to all selected lines
 map("x", "<leader>;", ":normal A;<CR>", { desc = "Add semicolon at end of selected lines" })
 
+-- Insert mode: new line below / above without leaving insert mode
+map("i", "<M-o>", "<C-o>o", { desc = "New line below" })
+map("i", "<M-O>", "<C-o>O", { desc = "New line above" })
+
 -- LSP code actions (quick fixes)
 map("n", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
 map("v", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
