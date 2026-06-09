@@ -357,6 +357,26 @@ RULES:
 end
 
 -- ======================================================
+-- PROJECT TOOL DEFINITION PROMPT
+-- Copies tool definition to the clipboard so you can paste it into your LLM of choice and get a structured
+-- ======================================================
+function M.tool_definitions()
+  local prompt = "Available tools:\n"
+    .. tool_signatures
+    .. [[
+
+RULES:
+- Always respond using <tool>...</tool> blocks when context is needed
+- Never guess file contents
+- Prefer find_file + read_file before editing
+- Use patch_file for modifications
+- Keep outputs minimal and structured
+]]
+
+  copy(prompt)
+end
+
+-- ======================================================
 -- PROJECT INIT (analogous to Claude Code's /init)
 -- Gathers a compact repo overview and builds a "document this codebase"
 -- prompt. Like every other command it only fills the clipboard: paste into
@@ -1313,7 +1333,7 @@ function preview_and_commit(new_lines, opts)
   local tag = opts.label and (opts.label .. " ") or ""
   local function chain(outcome)
     if opts.on_done then
-      vim.schedule(function() opts.on_done(outcome) end)
+      opts.on_done(outcome)
     end
   end
 
@@ -1322,7 +1342,7 @@ function preview_and_commit(new_lines, opts)
   local old_lines = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
 
   if vim.deep_equal(old_lines, new_lines) then
-    notify(tag .. "No changes to apply", vim.log.levels.INFO)
+    notify(tag .. "No changes to apply")
     chain("nochange")
     return
   end

@@ -8,6 +8,9 @@ local map = vim.keymap.set
 -- defaults: save=<C-s>, quit=<leader>qq, grep=<leader>sg or <leader>/,
 -- buffers=<leader>,, help=<leader>sh, and <Esc> already clears search highlight.
 
+-- LSP Rename
+vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename, { desc = "LSP Rename" })
+
 -- Select all text in the buffer
 map("n", "<C-a>", "gg0vG$", { desc = "Select all" })
 
@@ -63,6 +66,7 @@ end, { desc = "Open Claude with current file" })
 --   <leader>ar  refactor    selection -> "refactor this" (full replacement)
 --   <leader>ao  code        selection -> "modify this code" (full replacement)
 --   <leader>ad  code_diff   selection -> "return ONLY a diff"
+--   <leader>at  tool_def    get tool definition in the clipboard
 --   (each prepends "File: <repo-relative path>" so replies target the right file)
 -- Runtime (act on the clipboard / buffer):
 --   <leader>aa  apply       auto-detects: run tools (find_file/read_file/grep/
@@ -107,6 +111,7 @@ vim.keymap.set("n", "<leader>aW", agent.write_doc, opts("Write reply to AGENT.md
 vim.keymap.set({ "n", "x" }, "<leader>ap", sel(agent.plan), opts("Plan task"))
 vim.keymap.set({ "n", "x" }, "<leader>ax", agent.context, opts("Surrounding context"))
 vim.keymap.set({ "n", "x" }, "<leader>af", sel(agent.fix), opts("Fix error"))
+vim.keymap.set("n", "<leader>at", agent.tool_definitions, opts("Get tool definition"))
 
 -- Commands relying primarily on selections
 vim.keymap.set({ "n", "x" }, "<leader>ar", sel(agent.refactor), opts("Refactor selection"))
