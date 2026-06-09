@@ -24,7 +24,7 @@ map("n", "<leader>h", function()
 end, { desc = "Home (Dashboard)" })
 
 -- Append a semicolon to the end of the current line (if not already there)
-map("n", "<leader>;", function()
+map("n", "<M-;>", function()
   local line = vim.api.nvim_get_current_line()
   if line:match(";%s*$") then
     return
@@ -32,7 +32,12 @@ map("n", "<leader>;", function()
   vim.cmd("normal! A;")
 end, { desc = "Add semicolon at end of line" })
 -- Visual mode: append to all selected lines
-map("x", "<leader>;", ":normal A;<CR>", { desc = "Add semicolon at end of selected lines" })
+map("x", "<M-;>", ":normal A;<CR>", { desc = "Add semicolon at end of selected lines" })
+-- Insert mode: append semicolon at end of line and stay in insert mode
+map("i", "<M-;>", function()
+  vim.api.nvim_put({ ";" }, "c", false, true)
+  vim.cmd("normal! $")
+end, { desc = "Add semicolon at end of line" })
 
 -- Insert mode: new line below / above without leaving insert mode
 map("i", "<M-o>", "<C-o>o", { desc = "New line below" })
