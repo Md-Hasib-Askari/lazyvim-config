@@ -1325,9 +1325,10 @@ local function selection_replaced_lines(s, e, code)
   return out
 end
 
--- Show a side-by-side COLORED diff (current vs proposed) and wait for the user
--- to accept (ga / <CR>) or reject (q / <Esc>). Nothing is written to the buffer
--- until accept, and the real file is never touched -- you :w when happy.
+-- Show a UNIFIED diff (same format as lazygit / git diff) and wait for the
+-- user to accept (ga / <CR>) or reject (q / <Esc>). Uses git diff --no-index
+-- so the output is byte-for-byte identical to what lazygit shows — no
+-- alignment surprises from Neovim's internal diffthis algorithm.
 function preview_and_commit(new_lines, opts)
   opts = opts or {}
   local tag = opts.label and (opts.label .. " ") or ""
@@ -1347,25 +1348,68 @@ function preview_and_commit(new_lines, opts)
     return
   end
 
-  local ft = vim.bo[target_buf].filetype
+  local bufname = vim.api.nvim_buf_get_name(target_buf)
+  local fname = bufname ~= "" and vim.fn.fnamemodify(bufname, ":t") or "buffer"
 
-  -- Proposed content in a scratch buffer, opened in a vertical split.
+  -- Write old and new snapshots to temp files, let git compute the diff.
+  -- Same algorithm lazygit uses — always consistent.
+  local tmpdir = vim.fn.tempname()
+  vim.fn.mkdir(tmpdir, "p")
+  local old_path = tmpdir .. "/a_" .. fname
+  local new_path = tmpdir .. "/b_" .. fname
+  vim.fn.writefile(old_lines, old_path)
+  vim.fn.writefile(new_lines, new_path)
+
+  local diff_cmd = { "git", "-C", tmpdir, "diff", "--no-index", "--patience", "--", old_path, new_path }
+  local diff_out = vim.fn.system(diff_cmd)
+  local diff_ok = (vim.v.shell_error == 0 or vim.v.shell_error == 1) and diff_out ~= ""
+
+  -- Fallback: plain diff -u if git is unavailable.
+  if not diff_ok then
+    diff_out = vim.fn.system({ "diff", "-u", old_path, new_path })
+    diff_ok = (vim.v.shell_error == 0 or vim.v.shell_error == 1) and diff_out ~= ""
+  end
+  vim.fn.delete(tmpdir, "rf")
+
+  local diff_lines
+  if diff_ok then
+    diff_lines = vim.split(diff_out:gsub("\r\n", "\n"), "\n")
+    -- Clean temp paths from headers for a readable display.
+    local cleaned = {}
+    for _, l in ipairs(diff_lines) do
+      if l:match("^diff %-%-git") or l:match("^index ") then
+        -- skip git metadata
+      elseif l:match("^%-%-%- ") then
+        table.insert(cleaned, "--- a/" .. fname)
+      elseif l:match("^%+%+%+ ") then
+        table.insert(cleaned, "+++ b/" .. fname)
+      else
+        table.insert(cleaned, l)
+      end
+    end
+    diff_lines = cleaned
+  else
+    -- Absolute fallback: crude +/- listing.
+    diff_lines = {}
+    for _, l in ipairs(old_lines) do
+      table.insert(diff_lines, "-" .. l)
+    end
+    for _, l in ipairs(new_lines) do
+      table.insert(diff_lines, "+" .. l)
+    end
+  end
+
+  -- Unified diff in a scratch buffer with proper diff syntax highlighting.
   vim.cmd("vsplit")
   local prev_win = vim.api.nvim_get_current_win()
   local prev_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(prev_win, prev_buf)
-  vim.api.nvim_buf_set_lines(prev_buf, 0, -1, false, new_lines)
-  vim.bo[prev_buf].filetype = ft
+  vim.api.nvim_buf_set_lines(prev_buf, 0, -1, false, diff_lines)
+  vim.bo[prev_buf].filetype = "diff"
   vim.bo[prev_buf].buftype = "nofile"
-  pcall(vim.api.nvim_buf_set_name, prev_buf, "agent://proposed")
-
-  -- diff mode on both windows -> DiffAdd/DiffDelete/DiffChange highlighting.
-  vim.api.nvim_win_call(target_win, function()
-    vim.cmd("diffthis")
-  end)
-  vim.api.nvim_win_call(prev_win, function()
-    vim.cmd("diffthis")
-  end)
+  vim.bo[prev_buf].bufhidden = "wipe"
+  pcall(vim.api.nvim_buf_set_name, prev_buf, "agent://diff")
+  vim.cmd("wincmd =")
   vim.cmd("redraw")
 
   local done = false
@@ -1374,25 +1418,17 @@ function preview_and_commit(new_lines, opts)
       return
     end
     done = true
-    if vim.api.nvim_win_is_valid(target_win) then
-      vim.api.nvim_win_call(target_win, function()
-        vim.cmd("diffoff")
-      end)
-    end
     if vim.api.nvim_win_is_valid(prev_win) then
       vim.api.nvim_win_close(prev_win, true)
-    end
-    if vim.api.nvim_buf_is_valid(prev_buf) then
-      pcall(vim.api.nvim_buf_delete, prev_buf, { force = true })
     end
     if accept and vim.api.nvim_buf_is_valid(target_buf) then
       vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, new_lines)
       -- Save the target buffer to disk. writefile is the most reliable way
       -- (doesn't depend on buftype, window focus, or autocommands). Mark the
       -- buffer as unmodified afterwards so it doesn't show as dirty.
-      local bufname = vim.api.nvim_buf_get_name(target_buf)
-      if bufname ~= "" then
-        vim.fn.writefile(new_lines, bufname)
+      local bufname2 = vim.api.nvim_buf_get_name(target_buf)
+      if bufname2 ~= "" then
+        vim.fn.writefile(new_lines, bufname2)
         vim.bo[target_buf].modified = false
       end
       notify(tag .. "Applied and saved")

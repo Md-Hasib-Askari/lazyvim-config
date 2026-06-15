@@ -281,3 +281,29 @@ public class %s : IProblem
     end)
   end)
 end, { desc = "Create new LeetCode problem file" })
+
+-- =======================================================
+-- RESTART / QUIT
+-- =======================================================
+
+-- Restart LSP for the current buffer
+map("n", "<leader>Rl", "<cmd>LspRestart<CR>", { desc = "Restart LSP" })
+
+-- Restart Neovim (saves all buffers then re-launches nvim in the current tmux pane)
+map("n", "<leader>Rn", function()
+  vim.cmd("silent! wall")
+  vim.fn.system("tmux send-keys 'nvim' Enter")
+end, { desc = "Restart Neovim" })
+
+-- Restart the current tmux session
+map("n", "<leader>Rt", function()
+  vim.fn.system("tmux kill-session -t $(tmux display-message -p '#S') && tmux new-session")
+end, { desc = "Restart tmux session" })
+
+-- Close Neovim (save all and quit)
+map("n", "<leader>Rq", "<cmd>wqa<CR>", { desc = "Close Neovim (save all)" })
+
+-- Close tmux session
+map("n", "<leader>Rx", function()
+  vim.fn.system("tmux kill-session -t $(tmux display-message -p '#S')")
+end, { desc = "Close tmux session" })
