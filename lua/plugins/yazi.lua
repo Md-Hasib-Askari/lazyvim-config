@@ -22,4 +22,12 @@ return {
       { "<leader>E", false },
     },
   },
+  -- Also disable Snacks explorer's <leader>e / <leader>E remaps
+  {
+    "folke/snacks.nvim",
+    keys = {
+      { "<leader>e", false },
+      { "<leader>E", false },
+    },
+  },
 }

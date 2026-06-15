@@ -18,7 +18,7 @@ vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename, { desc = "LSP Rename" })
 map("n", "<C-a>", "gg0vG$", { desc = "Select all" })
 
 -- Copy current file path to system clipboard
-map("n", "<leader>fp", ':let @+ = expand("%")<CR>', { desc = "Copy relative file path" })
+map("n", "<leader>fp", ':let @+ = expand("%:.")<CR>', { desc = "Copy relative file path" })
 map("n", "<leader>fP", ':let @+ = expand("%:p")<CR>', { desc = "Copy absolute file path" })
 
 -- Open the LazyVim dashboard (home page, the snacks.nvim start screen)
@@ -171,3 +171,113 @@ vim.keymap.set("n", "<leader>ux", function()
   vim.cmd("Copilot disable")
   vim.notify("Copilot disabled")
 end, { desc = "Disable Copilot" })
+
+-- =======================================================
+-- PROBLEM FILE GENERATOR
+-- =======================================================
+-- Provides a guided prompt to create a new LeetCode problem file with the correct namespace, class, and method signature.
+-- Leader + P to create a new problem
+vim.keymap.set("n", "<leader>P", function()
+  local function resolve_category(callback)
+    local dirs = vim.fn.systemlist("ls -d */ | sed 's#/##' | grep -v '^bin$\\|^obj$\\|^.git$'")
+    table.insert(dirs, 1, "New category...")
+    vim.ui.select(dirs, { prompt = "Select category:" }, function(choice)
+      if not choice then
+        return
+      end
+      if choice == "New category..." then
+        vim.ui.input({ prompt = "New category folder name (e.g. 03_Stacks): " }, function(name)
+          if not name or name == "" then
+            return
+          end
+          vim.fn.mkdir(name, "p")
+          callback(name)
+        end)
+      else
+        callback(choice)
+      end
+    end)
+  end
+
+  resolve_category(function(category)
+    local base = category:gsub("^%d+_+", "")
+    local ns = base:gsub("_", ""):gsub(" ", "")
+    local categoryDisplay = base:gsub("_", " "):gsub("(%a)([%w']*)", function(a, b)
+      return a:upper() .. b
+    end)
+
+    vim.ui.input({ prompt = "Display name (e.g. Three Sum): " }, function(display)
+      if not display or display == "" then
+        return
+      end
+
+      -- Auto-generate slug from display name
+      local slug = display:lower():gsub("%s+", "_")
+
+      -- Auto-detect next problem number by scanning existing .cs files in the category
+      local highest = 0
+      local files = vim.fn.systemlist("ls " .. vim.fn.shellescape(category) .. "/*.cs 2>/dev/null")
+      for _, f in ipairs(files) do
+        local match = f:match("/(%d+)_")
+        if match then
+          local num = tonumber(match)
+          if num and num > highest then
+            highest = num
+          end
+        end
+      end
+      local next_num = string.format("%02d", highest + 1)
+
+      vim.ui.input({ prompt = "Method signature (e.g. int ThreeSum(int[] nums, int target)): " }, function(sig)
+        if not sig or sig == "" then
+          return
+        end
+        local ret_type, method = sig:match("^(.*)%s+([%w_]+)%s*%(")
+        if not ret_type or not method then
+          print("Invalid signature format")
+          return
+        end
+
+        local class = method .. "Problem"
+        local filepath = category .. "/" .. next_num .. "_" .. slug .. ".cs"
+        local content = string.format(
+          [[
+using Solve;
+
+namespace %s;
+
+public class %s : IProblem
+{
+    public string Category => "%s";
+    public string Name => "%s";
+
+    public %s
+    {
+        // TODO: Implement
+        throw new NotImplementedException();
+    }
+
+    public void Run()
+    {
+        // TODO: Set up test input and call the algorithm
+        // var result = %s(/* args */);
+        // Console.WriteLine(result);
+        throw new NotImplementedException();
+    }
+}
+]],
+          ns,
+          class,
+          categoryDisplay,
+          display,
+          sig,
+          method
+        )
+
+        vim.fn.writefile(vim.split(content, "\n"), filepath)
+        vim.cmd("e " .. filepath)
+        print("Created " .. filepath)
+      end)
+    end)
+  end)
+end, { desc = "Create new LeetCode problem file" })
