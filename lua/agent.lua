@@ -842,7 +842,7 @@ tool_signatures = table.concat(sig_lines, "\n") -- assign the forward-declared u
 
 -- Re-stated at the end of every TOOL RESULTS message so the protocol stays in
 -- context as a long conversation pushes the original system prompt out of focus.
-local tools_reminder = "---\n"
+loc = "---\n"
   .. "Need more context? Reply with ONLY a <tool> block (one call per line):\n"
   .. tool_signatures
   .. ("\nRequest at most %d files per turn; ask for the rest next turn."):format(TOOL_MAX_FILES_PER_TURN)
@@ -950,7 +950,7 @@ function M.tool()
   end
 
   local function finalize()
-    copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder)
+    copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n")
   end
 
   -- Reads are done; now preview each operation in turn, then copy everything.
@@ -999,9 +999,7 @@ function M.tool()
             nochange = "no change (identical content)",
           })[outcome] or tostring(outcome)
           table.insert(results, ("TOOL RESULT — %s\n%s"):format(op.line, status))
-          copy(
-            "TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder
-          )
+          copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n")
           run_operations(i + 1)
         end,
       })
@@ -1016,9 +1014,7 @@ function M.tool()
             nochange = "no change (identical content)",
           })[outcome] or tostring(outcome)
           table.insert(results, ("TOOL RESULT — %s\n%s"):format(op.line, status))
-          copy(
-            "TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n" .. tools_reminder
-          )
+          copy("TOOL RESULTS (paste back to continue):\n\n" .. table.concat(results, "\n\n") .. "\n\n")
           run_operations(i + 1)
         end,
       })
