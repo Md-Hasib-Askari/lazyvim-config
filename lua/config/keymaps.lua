@@ -15,7 +15,7 @@ map("i", "<M-u>", "<C-o>u", { desc = "Undo in insert mode" })
 vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename, { desc = "LSP Rename" })
 
 -- Select all text in the buffer
-map("n", "<C-a>", "gg0vG$", { desc = "Select all" })
+map("n", "<C-a>", "gg0VG$", { desc = "Select all" })
 
 -- Copy current file path to system clipboard
 map("n", "<leader>fp", ':let @+ = expand("%:.")<CR>', { desc = "Copy relative file path" })
@@ -291,7 +291,7 @@ map("n", "<leader>Rl", "<cmd>LspRestart<CR>", { desc = "Restart LSP" })
 
 -- Restart Neovim (saves all buffers then re-launches nvim in the current tmux pane)
 map("n", "<leader>Rn", function()
-  vim.cmd("silent! wall")
+  vim.cmd("restart") -- Save all buffers and restart Neovim
   vim.fn.system("tmux send-keys 'nvim' Enter")
 end, { desc = "Restart Neovim" })
 
