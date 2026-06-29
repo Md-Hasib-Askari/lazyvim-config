@@ -1,48 +1,42 @@
 return {
   {
     "neovim/nvim-lspconfig",
-    opts = {
-      servers = {
+    opts = function(_, opts)
+      opts = opts or {}
+      opts.servers = vim.tbl_deep_extend("force", opts.servers or {}, {
         omnisharp = false,
         csharp_ls = false,
-      },
-    },
-  },
-  {
-    "neovim/nvim-lspconfig",
-    config = function()
-      local lspconfig = require("lspconfig")
-
-      lspconfig.util.on_setup = nil
-
-      vim.lsp.config("roslyn_ls", {
-        default_config = {
-          cmd = {
-            "roslyn-language-server",
-            "--logLevel",
-            "Information",
-          },
-          filetypes = { "cs" },
-          root_dir = function(fname)
-            return lspconfig.util.root_pattern("*.sln", "*.slnx", "*.csproj")(fname)
-          end,
-          init_options = {
-            enableInlineDiagnostics = true,
-          },
-          settings = {
-            ["csharp"] = {
-              inlayHints = {
-                enable = true,
-              },
-              suggest = {
-                includeSymbolsFromUnimportedNamespaces = true,
-              },
-            },
-          },
-        },
       })
-
-      vim.lsp.enable("roslyn_ls")
+    end,
+    init = function()
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "cs",
+        group = vim.api.nvim_create_augroup("roslyn_ls_start", { clear = true }),
+        callback = function(args)
+          local clients = vim.lsp.get_clients({ name = "roslyn_ls", bufnr = args.buf })
+          if #clients > 0 then
+            return
+          end
+          local root_dir = require("lspconfig.util").root_pattern(
+            "*.sln", "*.slnx", "*.csproj"
+          )(args.buf)
+          if root_dir then
+            vim.lsp.start({
+              name = "roslyn_ls",
+              cmd = { "roslyn-language-server", "--logLevel", "Information" },
+              root_dir = root_dir,
+              filetypes = { "cs" },
+              init_options = { enableInlineDiagnostics = true },
+              settings = {
+                csharp = {
+                  inlayHints = { enable = true },
+                  suggest = { includeSymbolsFromUnimportedNamespaces = true },
+                },
+              },
+            })
+          end
+        end,
+      })
     end,
   },
 }
