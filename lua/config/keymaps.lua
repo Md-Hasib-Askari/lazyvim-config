@@ -307,3 +307,20 @@ map("n", "<leader>Rq", "<cmd>wqa<CR>", { desc = "Close Neovim (save all)" })
 map("n", "<leader>Rx", function()
   vim.fn.system("tmux kill-session -t $(tmux display-message -p '#S')")
 end, { desc = "Close tmux session" })
+
+-- Open opencode in a terminal on the right side
+map("n", "<leader>AO", function()
+  vim.cmd("rightbelow vsplit | terminal opencode")
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_win_get_buf(win)
+  vim.api.nvim_create_autocmd("TermClose", {
+    buffer = buf,
+    once = true,
+    callback = function()
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end,
+  })
+  vim.cmd("startinsert")
+end, { desc = "Open opencode in terminal" })
