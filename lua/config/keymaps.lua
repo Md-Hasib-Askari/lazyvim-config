@@ -310,5 +310,5 @@ end, { desc = "Close tmux session" })
 
 -- Open opencode in a right-side tmux split
 map("n", "<leader>AO", function()
-  vim.fn.system("tmux split-window -h -l 40% 'opencode'")
+  vim.fn.system("tmux split-window -h -l 30% 'opencode'")
 end, { desc = "Open opencode in tmux split" })
